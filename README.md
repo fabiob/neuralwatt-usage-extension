@@ -3,7 +3,7 @@
 
 A Gnome shell extension that displays your Neuralwatt usage and account stats in the top panel.
 
-<img src="assets/screen.png" width="440"  alt="Screenshot of extension panel"/>
+<img src="assets/neuralwatt-extension.png" width="440"  alt="Screenshot of extension panel with the pacing indicator"/>
 
 ## Important Note                                                                                                                                                                                                
                                                                                                                                                                                                                    
