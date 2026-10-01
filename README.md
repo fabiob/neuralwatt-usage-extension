@@ -13,6 +13,7 @@ I am not affiliated with Neuralwatt in any way, I just really needed a way to se
                                                                                                                                                                                                                    
 - **Near-realtime** usage display
 - **Account stats** including total usage for the subscription period, total usage for current day, and available credits
+- **Pacing indicator** on the usage bar showing how far through the billing cycle you are, with under/over pace status — just like the web dashboard
 - **Configurable refresh rate** to adjust how often the usage is updated
 - **Multiple accounts** support for users with multiple Neuralwatt accounts
                                                                                                                                                                                                             

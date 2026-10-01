@@ -8,7 +8,7 @@
     font-weight: bold;
 }
 
-/* Panel progress bar */
+/* Panel progress bar — terracotta fill on the original translucent track */
 .neuralwatt-panel-progress-bg {
     background-color: rgba(255, 255, 255, 0.2);
     border-radius: 3px;
@@ -21,7 +21,7 @@
     height: 10px;
     border-radius: 3px;
     transition: width 300ms ease-out;
-    background-color: #ffffff;
+    background-color: #d55934;
 }
 
 /* Usage section styles */
@@ -50,7 +50,9 @@
     color: #ffffff;
 }
 
-/* Progress bar styles */
+/* Progress bar styles: terracotta fill (web brand color) on the original
+   translucent dark track. The dark track keeps the white needle readable on
+   both sides of the fill and against the dark panel/menu chrome. */
 .neuralwatt-progress-bg {
     background-color: rgba(255, 255, 255, 0.1);
     border-radius: 4px;
@@ -63,22 +65,28 @@
     height: 8px;
     border-radius: 4px;
     transition: width 300ms ease-out;
+    background-color: #d55934;
 }
 
-.neuralwatt-progress-bar.usage-low {
-    background-color: #22c55e;
+/* Pacing indicator: thin white vertical needle marking billing-cycle
+   progress, taller than the track (y: -3 offset, like the web dashboard).
+   White reads on the dark track, on the terracotta fill (~4:1), and on the
+   dark panel/menu chrome around the bar. */
+.neuralwatt-pace-marker {
+    width: 2px;
+    height: 14px;
+    border-radius: 1px;
+    background-color: #ffffff;
 }
 
-.neuralwatt-progress-bar.usage-medium {
-    background-color: #eab308;
+.neuralwatt-pace-marker-panel {
+    height: 16px;
 }
 
-.neuralwatt-progress-bar.usage-high {
-    background-color: #f97316;
-}
-
-.neuralwatt-progress-bar.usage-critical {
-    background-color: #ef4444;
+.neuralwatt-pace-label {
+    font-size: 11px;
+    color: #bfbfbf;
+    margin-top: 2px;
 }
 
 /* Field label (left side of detail rows) */

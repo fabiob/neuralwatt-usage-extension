@@ -17,9 +17,37 @@ const ENERGY_API_URL = 'https://api.neuralwatt.com/v1/usage/energy';
 const MAX_ERRORS = 50;
 const MIN_REFRESH_INTERVAL = 5;
 const REQUEST_TIMEOUT = 30;
+const MENU_BAR_WIDTH = 200;
+const PANEL_BAR_WIDTH = 50;
 const _decoder = new TextDecoder('utf-8');
 
 const DEFAULT_PROFILES = [{name: 'Default', apiKey: '', showInPanel: true}];
+
+// Pacing: how far through the billing cycle we are, and whether usage is
+// ahead of ("over pace") or behind ("under pace") that point in time.
+const computeCycleProgress = (periodStart, periodEnd, now = Date.now()) => {
+    const start = Date.parse(periodStart);
+    const end = Date.parse(periodEnd);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+        return null;
+    }
+    const progress = ((now - start) / (end - start)) * 100;
+    return Math.min(100, Math.max(0, progress));
+};
+
+const getPaceStatus = (usagePercent, cyclePercent) => {
+    if (cyclePercent === null) {
+        return null;
+    }
+    return usagePercent > cyclePercent ? 'over pace' : 'under pace';
+};
+
+const formatPaceText = (usagePercent, cyclePercent, paceStatus) => {
+    if (cyclePercent === null || !paceStatus) {
+        return null;
+    }
+    return `${usagePercent.toFixed(1)}% used · ${cyclePercent.toFixed(0)}% through this billing cycle — ${paceStatus}`;
+};
 
 const NeuralwattUsageIndicator = GObject.registerClass(
 class NeuralwattUsageIndicator extends PanelMenu.Button {
@@ -128,6 +156,12 @@ class NeuralwattUsageIndicator extends PanelMenu.Button {
                 style_class: 'neuralwatt-panel-progress-bar',
             });
             panelProgressBg.add_child(panelProgressBar);
+            const panelPaceMarker = new St.Widget({
+                style_class: 'neuralwatt-pace-marker neuralwatt-pace-marker-panel',
+                visible: false,
+                y: -3,
+            });
+            panelProgressBg.add_child(panelPaceMarker);
             container.add_child(panelProgressBg);
 
             const label = new St.Label({
@@ -153,6 +187,7 @@ class NeuralwattUsageIndicator extends PanelMenu.Button {
                 nameLabel,
                 panelProgressBg,
                 panelProgressBar,
+                panelPaceMarker,
                 label,
             };
 
@@ -335,10 +370,25 @@ class NeuralwattUsageIndicator extends PanelMenu.Button {
                 style_class: 'neuralwatt-progress-bg',
             });
             const progressBar = new St.Widget({
-                style_class: 'neuralwatt-progress-bar usage-low',
+                style_class: 'neuralwatt-progress-bar',
             });
             progressBg.add_child(progressBar);
+            const paceMarker = new St.Widget({
+                style_class: 'neuralwatt-pace-marker',
+                visible: false,
+                y: -3,
+            });
+            progressBg.add_child(paceMarker);
             profileBox.add_child(progressBg);
+
+            const paceLabel = new St.Label({
+                text: '',
+                style_class: 'neuralwatt-pace-label',
+                x_expand: true,
+                x_align: Clutter.ActorAlign.CENTER,
+                visible: false,
+            });
+            profileBox.add_child(paceLabel);
 
             const detailsLabel = new St.Label({
                 text: '...',
@@ -377,6 +427,8 @@ class NeuralwattUsageIndicator extends PanelMenu.Button {
             this._profileUIs.push({
                 percentLabel,
                 progressBar,
+                paceMarker,
+                paceLabel,
                 detailsLabel,
                 resetValueLabel: resetRow.valueLabel,
                 creditsValueLabel: creditsRow.valueLabel,
@@ -717,9 +769,11 @@ class NeuralwattUsageIndicator extends PanelMenu.Button {
             ui.creditsValueLabel.set_text('—');
             ui.todayRequestsLabel.set_text('—');
             ui.todayEnergyLabel.set_text('—');
+            this._updatePaceDisplay(ui, null);
             if (panelUi) {
                 panelUi.label.set_text(panelText);
-                this._updatePanelProgressBar(panelUi.panelProgressBar, 0);
+                this._updateBarFill(panelUi.panelProgressBar, 0, PANEL_BAR_WIDTH);
+                this._updatePaceMarker(panelUi.panelPaceMarker, null, PANEL_BAR_WIDTH);
             }
             return;
         }
@@ -727,11 +781,14 @@ class NeuralwattUsageIndicator extends PanelMenu.Button {
         const kwhIncluded = data.subscription?.kwh_included ?? 0;
         const kwhUsed = data.subscription?.kwh_used ?? 0;
         const periodEnd = data.subscription?.current_period_end;
+        const periodStart = data.subscription?.current_period_start;
 
         const usagePercent = kwhIncluded > 0 ? (kwhUsed / kwhIncluded) * 100 : 0;
+        const cyclePercent = computeCycleProgress(periodStart, periodEnd);
 
         ui.percentLabel.set_text(`${usagePercent.toFixed(0)}%`);
-        this._updateProgressBar(ui.progressBar, usagePercent);
+        this._updateBarFill(ui.progressBar, usagePercent, MENU_BAR_WIDTH);
+        this._updatePaceDisplay(ui, {usagePercent, cyclePercent});
 
         const usedStr = kwhUsed.toFixed(2);
         const includedStr = kwhIncluded.toFixed(0);
@@ -748,35 +805,44 @@ class NeuralwattUsageIndicator extends PanelMenu.Button {
 
         if (panelUi) {
             panelUi.label.set_text(`${Math.round(usagePercent)}%`);
-            this._updatePanelProgressBar(panelUi.panelProgressBar, usagePercent);
+            this._updateBarFill(panelUi.panelProgressBar, usagePercent, PANEL_BAR_WIDTH);
+            this._updatePaceMarker(panelUi.panelPaceMarker, cyclePercent, PANEL_BAR_WIDTH);
         }
     }
 
-    _updatePanelProgressBar(progressBar, usage) {
-        const maxWidth = 50;
-        const width = Math.round((Math.min(100, Math.max(0, usage)) / 100) * maxWidth);
-        progressBar.set_width(width);
-    }
+    _updatePaceDisplay(ui, pace) {
+        if (!ui.paceMarker || !ui.paceLabel) return;
 
-    _updateProgressBar(progressBar, usage) {
-        const maxWidth = 200;
-        const width = Math.round((Math.min(100, Math.max(0, usage)) / 100) * maxWidth);
-        progressBar.set_width(width);
+        const cyclePercent = pace ? pace.cyclePercent : null;
+        this._updatePaceMarker(ui.paceMarker, cyclePercent, MENU_BAR_WIDTH);
 
-        progressBar.remove_style_class_name('usage-low');
-        progressBar.remove_style_class_name('usage-medium');
-        progressBar.remove_style_class_name('usage-high');
-        progressBar.remove_style_class_name('usage-critical');
-
-        if (usage >= 95) {
-            progressBar.add_style_class_name('usage-critical');
-        } else if (usage >= 90) {
-            progressBar.add_style_class_name('usage-high');
-        } else if (usage >= 75) {
-            progressBar.add_style_class_name('usage-medium');
+        const text = pace
+            ? formatPaceText(pace.usagePercent, cyclePercent, getPaceStatus(pace.usagePercent, cyclePercent))
+            : null;
+        if (text) {
+            ui.paceLabel.set_text(text);
+            ui.paceLabel.visible = true;
         } else {
-            progressBar.add_style_class_name('usage-low');
+            ui.paceLabel.visible = false;
+            ui.paceLabel.set_text('');
         }
+    }
+
+    _updatePaceMarker(marker, cyclePercent, trackWidth) {
+        if (!marker) return;
+        if (cyclePercent === null || cyclePercent === undefined) {
+            marker.visible = false;
+            return;
+        }
+        // Fractional x keeps the needle centered at the same fraction of the
+        // 50px panel track and the 200px menu track (no rounding skew).
+        const clamped = Math.min(100, Math.max(0, cyclePercent));
+        marker.set_x((clamped / 100) * trackWidth - 1);
+        marker.visible = true;
+    }
+
+    _updateBarFill(bar, usage, trackWidth) {
+        bar.set_width(Math.round((Math.min(100, Math.max(0, usage)) / 100) * trackWidth));
     }
 
     _formatPeriodEnd(isoString) {
