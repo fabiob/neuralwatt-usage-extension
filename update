@@ -10,7 +10,12 @@ mkdir -p "$DEST_DIR"
 
 rsync -a --exclude='.git' --exclude='.idea' --exclude='gschemas.compiled' "$SRC_DIR/" "$DEST_DIR"
 
-glib-compile-schemas "$DEST_DIR/schemas"
+# glib-compile-schemas may not be on PATH (e.g. NixOS); fall back to nix-shell
+if command -v glib-compile-schemas >/dev/null 2>&1; then
+    glib-compile-schemas "$DEST_DIR/schemas"
+else
+    nix-shell -p glib --run "glib-compile-schemas \"$DEST_DIR/schemas\""
+fi
 
 if gnome-extensions info "$UUID" >/dev/null 2>&1; then
     gnome-extensions disable "$UUID" 2>/dev/null || true
